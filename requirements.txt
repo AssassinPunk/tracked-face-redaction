@@ -1,0 +1,14 @@
+# ---- Image processing core ----
+# Norfair 2.3.0 requires NumPy < 2, so NumPy is held on the 1.x line.
+numpy>=1.26,<2.0
+# Headless build: no GUI libraries (smaller Docker image).
+# 4.10.0.84 works with NumPy 1.x; 4.12+ is built for NumPy 2.
+opencv-python-headless==4.10.0.84
+
+# ---- Tracking ----
+norfair==2.3.0
+
+# ---- Web API ----
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9

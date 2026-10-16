@@ -1,0 +1,30 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- Virtual environments ---
+.venv/
+venv/
+
+# --- Testing / coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Secrets / local config ---
+.env
+
+# --- Editors and OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Media: never commit real people's faces ---
+samples/
+outputs/
+tmp/
+
+# --- Model weights (downloaded by a script, not committed) ---
+models/*.onnx

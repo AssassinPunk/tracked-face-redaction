@@ -1,0 +1,6 @@
+# Everything the app needs, plus development tools.
+-r requirements.txt
+
+pytest>=8.0
+# FastAPI's TestClient is built on httpx.
+httpx>=0.27
