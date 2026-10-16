@@ -25,6 +25,7 @@ cd tracked-face-redaction
 python3.11 -m venv .venv
 # Windows: .\.venv\Scripts\Activate.ps1    macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
+python scripts/download_model.py
 python scripts/verify_env.py      # should print ENVIRONMENT OK
 python -m pytest
 ```
