@@ -1,0 +1,8 @@
+[project]
+name = "tracked-face-redaction"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]   # where pytest looks for tests
+pythonpath = ["."]      # make `import app` work from the project root
