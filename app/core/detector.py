@@ -7,6 +7,7 @@ project never has to remember column numbers.
 """
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,6 +62,9 @@ class FaceDetector:
             str(model_path), "", self._input_size,
             score_threshold, nms_threshold, 5000,
         )
+        # setInputSize() + detect() mutate shared state, so concurrent API
+        # requests must not interleave them (see detect()).
+        self._lock = threading.Lock()
 
     def detect(self, image: np.ndarray) -> list[Face]:
         """Return every face found in a BGR uint8 image."""
@@ -84,12 +88,13 @@ class FaceDetector:
             small = image
 
         # YuNet must know the exact input size before every detection.
+        # Locked: another thread could change the size between these calls.
         sh, sw = small.shape[:2]
-        if (sw, sh) != self._input_size:
-            self._net.setInputSize((sw, sh))
-            self._input_size = (sw, sh)
-
-        _, rows = self._net.detect(small)
+        with self._lock:
+            if (sw, sh) != self._input_size:
+                self._net.setInputSize((sw, sh))
+                self._input_size = (sw, sh)
+            _, rows = self._net.detect(small)
         if rows is None:  # OpenCV returns None, not an empty array
             return []
         return [self._row_to_face(row, scale) for row in rows]

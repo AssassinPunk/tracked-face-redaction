@@ -1,4 +1,6 @@
 """Detector tests on a real photo with a known answer: 4 faces."""
+from concurrent.futures import ThreadPoolExecutor
+
 import cv2
 
 EXPECTED_FACES = 4
@@ -42,3 +44,14 @@ def test_same_faces_found_on_enlarged_image(detector, crew_image):
                          for f in big_faces)
     for (ax, ay), (bx, by) in zip(small_centres, big_centres):
         assert abs(ax - bx) < 10 and abs(ay - by) < 10
+
+
+def test_detect_is_correct_under_concurrent_calls(detector, crew_image):
+    # Two different input sizes force setInputSize() on alternating calls,
+    # which is exactly what concurrent API requests do. Without the lock in
+    # FaceDetector.detect(), threads could detect with the wrong input size.
+    padded = cv2.copyMakeBorder(crew_image, 0, 0, 0, 200, cv2.BORDER_CONSTANT)
+    images = [crew_image, padded] * 20
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        counts = list(pool.map(lambda img: len(detector.detect(img)), images))
+    assert counts == [EXPECTED_FACES] * len(images)
