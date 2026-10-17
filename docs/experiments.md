@@ -3,12 +3,12 @@
 ## 2026-10-17: Detection threshold and input size
 
 **Setup:** one crowded group photo (2784×2333 px, ~25 visible faces; stock
-photo kept locally, not committed). CPU: [AMD Ryzen 7 4000 Series]. Single runs, not
+photo kept locally, not committed). CPU: AMD Ryzen 7 4800H . Single runs, not
 averaged, so timings are indicative only.
 
 | Threshold | max_side | Faces | Time (ms) | Lowest score |
 |---|---|---|---|---|
-| 0.6 | 640  | 24 | [fill in] | 0.714 |
+| 0.6 | 640  | 24 | 41.4 (median of 3; range 36.5–48.8) | 0.714 |
 | 0.9 | 640  | 15 | 47.4      | 0.901 |
 | 0.6 | 1280 | 24 | 129.4     | 0.630 |
 
@@ -19,7 +19,12 @@ averaged, so timings are indicative only.
 - 640 and 1280 both found 24 faces, but not the same 24: each found one face
   the other missed (~25 distinct faces in total). Face count alone hides this;
   evaluation needs position-matched ground truth.
-- 1280 raised most scores (e.g. 0.731 -> 0.881) but took ~2.7x longer.
+- 1280 raised most scores (e.g. 0.731 -> 0.881) but took ~3.1x longer
+  (129.4 ms vs. a 41.4 ms median at 640).
+- The threshold does not affect speed: the 0.9 run (47.4 ms) falls inside the
+  0.6 run's range (36.5–48.8 ms). The CNN does the same work either way; the
+  threshold only filters its finished output. Raising it costs recall and saves
+  no time.
 
 **Decisions**
 - Keep `score_threshold = 0.6`.
