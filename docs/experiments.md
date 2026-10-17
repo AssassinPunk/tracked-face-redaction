@@ -3,7 +3,8 @@
 ## 2026-10-17: Detection threshold and input size
 
 **Setup:** one crowded group photo (2784×2333 px, ~25 visible faces; stock
-photo kept locally, not committed). CPU: AMD Ryzen 7 4800H . Single runs, not
+photo kept locally, not committed). CPU: AMD Ryzen 7 4800H (laptop). An RTX 3050 Laptop GPU is present but unused;
+the pip OpenCV build runs on the CPU only. Single runs, not
 averaged, so timings are indicative only.
 
 | Threshold | max_side | Faces | Time (ms) | Lowest score |
