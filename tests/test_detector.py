@@ -4,13 +4,6 @@ import pytest
 
 from app.core.detector import FaceDetector
 
-
-@pytest.fixture(scope="module")
-def detector() -> FaceDetector:
-    # Built once and shared by every test in this file (model loading is slow).
-    return FaceDetector()
-
-
 def test_missing_model_gives_helpful_error(tmp_path):
     with pytest.raises(FileNotFoundError, match="download_model.py"):
         FaceDetector(model_path=tmp_path / "missing.onnx")
