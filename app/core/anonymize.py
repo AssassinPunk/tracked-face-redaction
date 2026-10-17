@@ -23,8 +23,16 @@ class Mode(str, Enum):
 
 # strength = kernel size (blur) or block size (pixelate) as a fraction of
 # the face's shorter side. Mask ignores strength.
-DEFAULT_STRENGTH = {Mode.BLUR: 0.5, Mode.PIXELATE: 0.12, Mode.MASK: 1.0}
-
+#
+# Chosen by measurement, not intuition (see docs/experiments.md, 2026-10-17):
+# after redaction we re-run the detector; a face it can still find was not
+# hidden well enough.
+#   - pixelate 0.25 was the weakest strength leaving 0 faces detectable on
+#     both test images; 0.3 adds a safety margin.
+#   - blur left faces detectable even at 1.0 (its maximum), so blur is the
+#     weaker, context-preserving option and defaults to its strongest setting.
+DEFAULT_MODE = Mode.PIXELATE
+DEFAULT_STRENGTH = {Mode.BLUR: 1.0, Mode.PIXELATE: 0.3, Mode.MASK: 1.0}
 
 def expand_box(face: Face, factor: float = 1.3) -> Box:
     """Grow the face box around its centre so hair, ears and chin are covered."""
@@ -69,7 +77,7 @@ def pixelate_roi(roi: np.ndarray, strength: float) -> np.ndarray:
 def anonymize(
     image: np.ndarray,
     faces: Iterable[Face],
-    mode: Mode | str = Mode.BLUR,
+    mode: Mode | str = DEFAULT_MODE,
     strength: float | None = None,
     expand: float = 1.3,
 ) -> np.ndarray:

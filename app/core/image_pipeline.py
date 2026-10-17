@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from app.core.anonymize import Mode, anonymize
+from app.core.anonymize import DEFAULT_MODE, Mode, anonymize
 from app.core.detector import Face, FaceDetector
 
 
@@ -42,7 +42,7 @@ def encode_image(image: np.ndarray, ext: str = ".jpg", jpeg_quality: int = 92) -
 def redact_image(
     image: np.ndarray,
     detector: FaceDetector,
-    mode: Mode | str = Mode.BLUR,
+    mode: Mode | str = DEFAULT_MODE,
     strength: float | None = None,
     expand: float = 1.3,
 ) -> RedactionResult:

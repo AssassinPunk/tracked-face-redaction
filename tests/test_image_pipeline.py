@@ -36,3 +36,9 @@ def test_masked_faces_are_no_longer_detectable(detector, crew_image):
 
 def test_encoded_output_carries_no_exif_metadata(crew_image):
     assert b"Exif" not in encode_image(crew_image)
+
+def test_default_redaction_leaves_no_face_detectable(detector, crew_image):
+    # Privacy guarantee measured in docs/experiments.md (2026-10-17).
+    # If this fails, a default was weakened: re-run the strength experiment.
+    result = redact_image(crew_image, detector)  # every setting at its default
+    assert detector.detect(result.image) == []

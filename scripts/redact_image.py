@@ -38,7 +38,7 @@ def labelled(image: np.ndarray, text: str, height: int = 360) -> np.ndarray:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Detect and anonymise faces.")
     parser.add_argument("image", type=Path)
-    parser.add_argument("--mode", choices=[m.value for m in Mode] + ["all"], default="blur")
+    parser.add_argument("--mode", choices=[m.value for m in Mode] + ["all"], default="pixelate")
     parser.add_argument("--strength", type=float, default=None)
     parser.add_argument("--threshold", type=float, default=0.6)
     args = parser.parse_args()

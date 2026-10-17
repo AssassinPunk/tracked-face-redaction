@@ -108,3 +108,10 @@ def test_unknown_mode_rejected(noise):
 def test_shrinking_box_rejected(noise):
     with pytest.raises(ValueError):
         anonymize(noise, [], expand=0.8)
+
+def test_pixelate_leaves_only_a_few_solid_blocks(noise):
+    out = anonymize(noise, [make_face(100, 100, 100, 100)],
+                    mode="pixelate", strength=0.12)
+    roi = out[85:215, 85:215].reshape(-1, 3)
+    # 130 px ROI, block = round(0.12 * 130) = 16 -> an 8 x 8 grid = 64 colours max.
+    assert len(np.unique(roi, axis=0)) <= 64
