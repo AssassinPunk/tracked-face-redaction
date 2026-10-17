@@ -32,3 +32,48 @@ averaged, so timings are indicative only.
 - Keep `max_side = 640` as the default; re-evaluate in Milestone 7 with
   annotated frames.
 - Future work: multi-scale detection (run at 640 and 1280, merge with NMS).
+
+## 2026-10-17: Redaction strength (re-detection test)
+
+**Method:** redact all detected faces, then run the detector again on the
+output. A face that is still detectable was not hidden well enough. This is a
+minimum bar, not proof of anonymity: detectability is not identifiability.
+Images: group photo (24 detected faces, 2784x2333) and the crew fixture
+(4 faces, 640 px). CPU: AMD Ryzen 7 4800H. Single runs.
+
+| Mode | Strength | Still detectable (group / crew) | Time, group (ms) |
+|---|---|---|---|
+| blur | 0.1 | 24 / - | 43.2 |
+| blur | 0.25 | 25 / - | 83.6 |
+| blur | 0.5 (old default) | 21 / 4 | 275.1 |
+| blur | 0.75 | 4 / - | 664.5 |
+| blur | 1.0 | 2 / 1 | 1385.7 |
+| pixelate | 0.05 | 25 / - | 39.8 |
+| pixelate | 0.08 | 25 / - | 56.7 |
+| pixelate | 0.12 (old default) | 17 / 4 | 59.2 |
+| pixelate | 0.2 | 2 / 0 | 43.2 |
+| pixelate | 0.25 | 0 / 0 | 74.7 |
+| pixelate | 0.3 | 0 / 0 | 53.5 |
+| pixelate | 0.4 | 0 / 0 | 54.2 |
+| mask | - | 0 / 0 | 54.6 |
+
+**Findings**
+- The original defaults (blur 0.5, pixelate 0.12) were chosen by intuition
+  and failed: 21/24 and 17/24 faces remained detectable.
+- Blur never reached 0, even at maximum strength. Gaussian blur is a low-pass
+  filter: it removes fine detail but keeps the coarse layout (eye regions,
+  face oval) that the detector relies on.
+- Blur time grows with strength (43 -> 1386 ms) because work scales with
+  kernel size; pixelation stays ~40-75 ms at every strength.
+- Pixelation at 0.25+ breaks the spatial layout and left no face detectable.
+- Metric flaw: "still detectable" counts every face found afterwards,
+  including faces the first pass missed, hence 25 > 24 redacted.
+  [your observation from group_blur_0.25_detected.jpg]
+  Milestone 7 should count only re-detections overlapping a redacted box.
+
+**Decisions**
+- Default mode is now pixelate at 0.3 (0.25 measured + safety margin).
+- Blur defaults to 1.0 and is documented as the weaker, slower,
+  context-preserving option.
+- A regression test now asserts that default redaction leaves no face in the
+  crew fixture detectable.
