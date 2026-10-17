@@ -95,7 +95,13 @@ Images: group photo (24 detected faces, 2784x2333) and the crew fixture
 - Detecting on every frame still leaks: faces were visibly unredacted in
   some frames. N = 1 is a baseline, not ground truth; recall must be measured
   against hand-annotated frames (Milestone 7).
-- Misses observed: [what you saw: head turns, motion blur, small faces, ...]
+- Misses observed (checked by eye, every 10 frames, plus an independent Haar
+  scan): almost all leaks are faces cut off by the frame edge, with only the
+  mouth/chin visible. Worst case: one person at the top edge from 10.4 to 13.6 s
+  (~80 consecutive frames). Also 7.6-8.0 s, 10.4-12.4 s, 11.2-12.0 s,
+  4.8-5.6 s and 16.8-18.8 s. Every face fully inside the frame was redacted.
+- These are long runs, not one-frame dips, so the dip heuristic undercounts
+  them, and tracking cannot recover faces that were never detected.
 - 0.30x realtime on 4K. Per-frame time includes 4K decode, resize, detection,
   anonymisation and 4K encode. Tracking only removes detection on skipped
   frames, so its speedup is bounded by detection's share of the time
