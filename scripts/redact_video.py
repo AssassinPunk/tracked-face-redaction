@@ -44,7 +44,17 @@ def main() -> int:
     print(f"Speed      : {result.processing_fps:.1f} fps  "
           f"(realtime factor {result.realtime_factor:.2f}x)")
     print(f"Faces/frame: min {min(counts)}, mean {statistics.mean(counts):.1f}, max {max(counts)}")
-    print(f"Frames with 0 faces: {counts.count(0)}")
+    def stamp(i: int) -> str:  # frame index plus its time in the video}
+        return f"{i} ({i / info.fps:.2f}s)"
+
+    zero = [i for i, c in enumerate(counts) if c == 0]
+    # A one-frame dip: the count drops for a single frame, then recovers.
+    # People don't vanish for one frame, so this almost always means a miss.
+    dips = [i for i in range(1, len(counts) - 1)
+            if counts[i] < counts[i - 1] and counts[i] < counts[i + 1]]
+    print(f"Zero-face frames : {', '.join(map(stamp, zero)) or 'none'}")
+    shown = ", ".join(map(stamp, dips[:15])) + (" ..." if len(dips) > 15 else "")
+    print(f"One-frame dips   : {len(dips)} -> {shown or 'none'}")
     print(f"Saved      : {out_path}")
     return 0
 
