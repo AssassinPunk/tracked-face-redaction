@@ -106,6 +106,11 @@ Images: group photo (24 detected faces, 2784x2333) and the crew fixture
   anonymisation and 4K encode. Tracking only removes detection on skipped
   frames, so its speedup is bounded by detection's share of the time
   (Amdahl's law). Stage timing must be measured before claiming a speedup.
+- Transition measured frame by frame: the top-edge face is detected and
+  pixelated up to frame 258 (10.32 s) while partly cut off, then lost
+  abruptly at frames 259-260 once the eyes leave the frame, and stays exposed
+  for ~80 frames. Test case for Milestone 6: does a track carried by the
+  Kalman prediction keep covering it after frame 258, and for how long?
 
 **Hypothesis for Milestone 6:** a tracker may carry a face through frames
 where detection misses it, reducing leaks as well as cost. To be tested.
