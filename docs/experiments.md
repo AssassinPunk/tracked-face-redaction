@@ -77,3 +77,29 @@ Images: group photo (24 detected faces, 2784x2333) and the crew fixture
   context-preserving option.
 - A regression test now asserts that default redaction leaves no face in the
   crew fixture detectable.
+
+## 2026-10-17: Video baseline (detect every frame)
+
+**Clip:** own phone video (not committed), 3840x2160 @ 25 fps, 505 frames,
+20.2 s, up to 6 people. CPU: AMD Ryzen 7 4800H. Mode: pixelate (default).
+
+| Measurement | Value |
+|---|---|
+| Processing time | 66.6 s for 505 frames |
+| Processing speed | 7.6 fps (realtime factor 0.30x) |
+| Faces per frame | min 0, mean 4.3, max 6 |
+| Frames with 0 faces | 18sec |
+| One-frame dips | 3 |
+
+**Findings**
+- Detecting on every frame still leaks: faces were visibly unredacted in
+  some frames. N = 1 is a baseline, not ground truth; recall must be measured
+  against hand-annotated frames (Milestone 7).
+- Misses observed: [what you saw: head turns, motion blur, small faces, ...]
+- 0.30x realtime on 4K. Per-frame time includes 4K decode, resize, detection,
+  anonymisation and 4K encode. Tracking only removes detection on skipped
+  frames, so its speedup is bounded by detection's share of the time
+  (Amdahl's law). Stage timing must be measured before claiming a speedup.
+
+**Hypothesis for Milestone 6:** a tracker may carry a face through frames
+where detection misses it, reducing leaks as well as cost. To be tested.
