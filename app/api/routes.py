@@ -1,18 +1,34 @@
 """HTTP endpoints. Kept thin: they validate, call app.core, and shape responses."""
 from __future__ import annotations
 
+import logging
+import shutil
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from app import __version__
 from app.core.anonymize import DEFAULT_MODE, Mode
 from app.core.image_pipeline import decode_image, encode_image, redact_image
+from app.core.video_pipeline import VideoLimitError, VideoLimits, redact_video
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 # Declared content type -> output extension. Output keeps the input format.
 ALLOWED_IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+# Video output is always H.264 MP4, whatever the input container.
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
+CHUNK = 1024 * 1024  # copy uploads to disk 1 MB at a time
+
+MODE_QUERY = Query(DEFAULT_MODE, description="How to hide faces. Pixelate is the "
+                   "measured default; blur preserves context but is weaker.")
+STRENGTH_QUERY = Query(None, gt=0, le=1, description="Fraction of face size used as "
+                       "blur kernel or pixel block. Omit for the measured default.")
 
 
 class HealthResponse(BaseModel):
@@ -23,6 +39,13 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+def _require_detector(request: Request):
+    detector = request.app.state.detector
+    if detector is None:
+        raise HTTPException(503, "Face detection model is not loaded.")
+    return detector
 
 
 @router.get(
@@ -61,15 +84,10 @@ def health(request: Request) -> JSONResponse:
 def redact_image_endpoint(  # plain `def`: CPU-bound work runs in the thread pool
     request: Request,
     file: UploadFile = File(..., description="JPEG, PNG or WebP image."),
-    mode: Mode = Query(DEFAULT_MODE, description="How to hide faces. Pixelate is the "
-                       "measured default; blur preserves context but is weaker."),
-    strength: float | None = Query(None, gt=0, le=1, description="Fraction of face size "
-                                   "used as blur kernel or pixel block. Omit for the "
-                                   "measured default."),
+    mode: Mode = MODE_QUERY,
+    strength: float | None = STRENGTH_QUERY,
 ) -> Response:
-    detector = request.app.state.detector
-    if detector is None:
-        raise HTTPException(503, "Face detection model is not loaded.")
+    detector = _require_detector(request)
     settings = request.app.state.settings
 
     # 1. Declared type (cheap, but clients can lie).
@@ -103,4 +121,81 @@ def redact_image_endpoint(  # plain `def`: CPU-bound work runs in the thread poo
             "Content-Disposition": f'attachment; filename="redacted{ext}"',  # never echo user input
             "Cache-Control": "no-store",  # don't let browsers or proxies keep a copy
         },
+    )
+
+
+def _save_upload(file: UploadFile, dest: Path, max_bytes: int) -> None:
+    """Copy the upload to disk in chunks; stop as soon as it passes the limit."""
+    written = 0
+    with dest.open("wb") as out:
+        while chunk := file.file.read(CHUNK):
+            written += len(chunk)
+            if written > max_bytes:
+                raise HTTPException(413, f"Video is larger than the "
+                                         f"{max_bytes / (1024 * 1024):g} MB limit.")
+            out.write(chunk)
+    if written == 0:
+        raise HTTPException(400, "Empty file.")
+
+
+@router.post(
+    "/redact/video",
+    tags=["redaction"],
+    summary="Detect and anonymise every face in every frame of a video",
+    response_class=FileResponse,
+    responses={
+        200: {"description": "The redacted video as a browser-playable H.264 MP4 "
+                             "(no audio track).", "content": {"video/mp4": {}}},
+        400: {"model": ErrorResponse, "description": "File is not a readable video"},
+        413: {"model": ErrorResponse, "description": "File too large, too long, or frames too big"},
+        415: {"model": ErrorResponse, "description": "Unsupported file type"},
+        503: {"model": ErrorResponse, "description": "Model not loaded"},
+    },
+)
+def redact_video_endpoint(  # plain `def`: CPU-bound work runs in the thread pool
+    request: Request,
+    file: UploadFile = File(..., description="MP4, MOV or WebM video."),
+    mode: Mode = MODE_QUERY,
+    strength: float | None = STRENGTH_QUERY,
+) -> FileResponse:
+    detector = _require_detector(request)
+    settings = request.app.state.settings
+
+    if (file.content_type or "") not in ALLOWED_VIDEO_TYPES:
+        raise HTTPException(415, f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_VIDEO_TYPES))}.")
+
+    # OpenCV reads video from a path, so this request gets a private temp folder.
+    # Fixed names inside it: the user's filename never touches the filesystem.
+    work = Path(tempfile.mkdtemp(prefix="tfr-", dir=settings.tmp_dir))
+    try:
+        source, output = work / "input", work / "redacted.mp4"
+        _save_upload(file, source, settings.max_video_bytes)
+        limits = VideoLimits(settings.max_video_seconds, settings.max_video_pixels)
+        try:
+            result = redact_video(source, output, detector, mode=mode,
+                                  strength=strength, limits=limits)
+        except VideoLimitError as exc:  # subclass of ValueError: catch it first
+            raise HTTPException(413, str(exc)) from None
+        except ValueError:
+            raise HTTPException(400, "File could not be read as a video.") from None
+        except RuntimeError:
+            logger.exception("Video encoding failed")  # details in logs only
+            raise HTTPException(500, "Video encoding failed.") from None
+        source.unlink()  # the original is no longer needed: delete it now
+    except BaseException:
+        shutil.rmtree(work, ignore_errors=True)  # any failure: remove everything now
+        raise
+
+    # Success: the output must exist while it is streamed, so delete the
+    # folder in a background task that runs after the response is sent.
+    return FileResponse(
+        output,
+        media_type="video/mp4",
+        filename="redacted.mp4",
+        headers={
+            "X-Frames-Processed": str(result.frames_processed),
+            "X-Max-Faces-In-Frame": str(max(result.faces_per_frame)),
+            "Cache-Control": "no-store",
+        },
+        background=BackgroundTask(shutil.rmtree, work, ignore_errors=True),
     )
