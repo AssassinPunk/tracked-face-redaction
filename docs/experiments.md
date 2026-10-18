@@ -135,3 +135,25 @@ Same 4K clip (3840x2160 @ 25 fps, 505 frames), Ryzen 7 4800H, pixelate, single r
   benchmark a 1080p clip in Milestone 7.
 - Anonymise (27%) likely dominated by the full-frame copy in anonymize();
   candidate optimisation, to be measured, not assumed.
+
+## 2026-10-18: Detect-every-N sweep (speed only)
+
+4K clip (3840x2160 @ 25 fps, 505 frames), Ryzen 7 4800H, pixelate,
+median of 3 runs. Data: benchmarks/results/clip-20261018-161936/.
+
+| N | hold (s) | track (s) | detector runs |
+|---|---|---|---|
+| 1 | 42.3 (none) | 44.5 | 505 |
+| 2 | 38.0 | 37.7 | 253 |
+| 5 | 33.5 | 35.5 | 101 |
+| 10 | 33.3 | 34.4 | 51 |
+| 20 | 32.9 | 32.3 | 26 |
+
+- Speedup plateaus at ~1.3x (Amdahl prediction from stage timing: ~1.38x max).
+  N=20 is ~1 s faster than N=5 but leaves new faces visible up to 19 frames
+  instead of 4, so on 4K, speed cannot justify a large N; recall decides.
+- Hold vs track timing differences (<= 2 s) are within run-to-run noise;
+  tracker cost is ~0.2 s per video.
+- Zero-box frames depend on where detection frames fall (hold: 5 at N=5,
+  0 at N=10/20, because frame 295 is a detection frame only at N=5). Not a
+  valid leak metric: Milestone 7 measures uncovered faces against annotations.
