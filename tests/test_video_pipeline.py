@@ -7,6 +7,7 @@ import pytest
 
 from app.core.video_pipeline import (Strategy, VideoLimitError, VideoLimits, check_limits,
                                      probe_video, redact_video)
+from app.core.detector import Face
 
 
 def test_probe_reads_source_properties(crew_video, crew_image):
@@ -114,7 +115,7 @@ def assert_no_face_in_video(path, detector, expected_frames):
     assert frames == expected_frames
 
 
-@pytest.mark.parametrize("n, strategy", [(5, "hold"), (5, "track"), (10, "track")])
+@pytest.mark.parametrize("n, strategy", [(5, "hold"), (5, "track"), (10, "track"), (5, "union")])
 def test_detector_runs_only_every_n_frames(crew_video, detector, tmp_path, n, strategy):
     counting = CountingDetector(detector)
     result = redact_video(crew_video.path, tmp_path / "out.mp4", counting,
@@ -134,3 +135,17 @@ def test_no_face_detectable_when_skipping_frames(crew_video, detector, tmp_path,
 def test_skipping_frames_without_a_strategy_is_rejected(crew_video, detector, tmp_path):
     with pytest.raises(ValueError):
         redact_video(crew_video.path, tmp_path / "out.mp4", detector, detect_every=5)
+
+class FixedFaceDetector:
+    """Always 'finds' one face in the same place, so box counts are exact."""
+
+    def detect(self, frame):
+        return [Face(x=100, y=100, w=80, h=100, score=0.9, landmarks=())]
+
+
+@pytest.mark.parametrize("strategy, boxes_on_skipped", [("hold", 1), ("track", 1), ("union", 2)])
+def test_boxes_redacted_per_strategy(crew_video, tmp_path, strategy, boxes_on_skipped):
+    result = redact_video(crew_video.path, tmp_path / "out.mp4", FixedFaceDetector(),
+                          detect_every=5, strategy=strategy)
+    expected = [1 if i % 5 == 0 else boxes_on_skipped for i in range(crew_video.frames)]
+    assert result.faces_per_frame == expected

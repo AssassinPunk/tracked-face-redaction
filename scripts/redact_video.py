@@ -27,7 +27,7 @@ def main() -> int:
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--detect-every", type=int, default=1,
                         help="run the detector every N frames")
-    parser.add_argument("--strategy", choices=["none", "hold", "track"], default=None,
+    parser.add_argument("--strategy", choices=["none", "hold", "track", "union"], default=None,
                         help="boxes on skipped frames (default: none if N=1, else track)")
     args = parser.parse_args()
     strategy = args.strategy or ("none" if args.detect_every == 1 else "track")

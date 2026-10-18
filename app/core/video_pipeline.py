@@ -1,10 +1,12 @@
 """Video redaction: decode frames -> detect -> anonymise -> encode (H.264).
 
 Detection runs every `detect_every` frames. On the frames in between, the
-boxes come from one of two strategies:
+boxes come from one of three strategies:
   - HOLD:  reuse the last detection frame's boxes unchanged (simple baseline)
   - TRACK: Norfair predicts where each face moved (Kalman filter)
-detect_every=1 with Strategy.NONE is the detect-every-frame baseline.
+  - UNION: both. Hold fails when faces move; track fails when they stop or
+           turn (the prediction overshoots). Redacting both boxes covers
+           either failure, at the cost of a larger redacted area.
 
 OpenCV reads video through file paths, not bytes, so this module takes
 paths. (The API will use temporary files.)
@@ -31,7 +33,7 @@ class Strategy(str, Enum):
     NONE = "none"    # no skipping: only valid with detect_every=1
     HOLD = "hold"    # reuse the last detected boxes on skipped frames
     TRACK = "track"  # Kalman-predicted boxes on skipped frames
-
+    UNION = "union"  # held AND tracked boxes on skipped frames
 
 class VideoLimitError(ValueError):
     """The video is longer or larger than the configured limits."""
@@ -144,7 +146,7 @@ def redact_video(
         raise ValueError(f"Could not open {Path(input_path).name} as a video.")
 
     tracker = (FaceTracker(detect_every, coast_frames)
-               if strategy is Strategy.TRACK else None)
+               if strategy in (Strategy.TRACK, Strategy.UNION) else None)
     held: list[Face] = []  # HOLD: boxes from the last detection frame
     detection_frames = 0
     faces_per_frame: list[int] = []
@@ -178,12 +180,18 @@ def redact_video(
                     detection_frames += 1
                 t2 = time.perf_counter()
 
-                if tracker is not None:
-                    boxes = tracker.update(detected)  # None = predict only
-                elif detected is not None:
-                    boxes = held = detected
-                else:
-                    boxes = held                      # HOLD on a skipped frame
+                # The tracker must see EVERY frame (None = predict only).
+                tracked = tracker.update(detected) if tracker is not None else []
+                if detected is not None:
+                    held = detected
+                if strategy is Strategy.TRACK:
+                    boxes = tracked
+                elif strategy is Strategy.UNION:
+                    # detection frame: raw detections + coasting tracks;
+                    # skipped frame: last detections + predictions
+                    boxes = tracked if detected is not None else held + tracked
+                else:  # NONE (always a detection frame) or HOLD
+                    boxes = held
                 t3 = time.perf_counter()
 
                 redacted = anonymize(frame, boxes, mode=mode, strength=strength)

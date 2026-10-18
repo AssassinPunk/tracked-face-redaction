@@ -32,9 +32,9 @@ RESULTS_DIR = PROJECT_ROOT / "benchmarks" / "results"
 def configurations(ns: list[int]) -> list[tuple[int, str]]:
     configs = [(1, "none")]                      # the every-frame baseline
     for n in ns:
-        for strategy in ("hold", "track"):
-            if n == 1 and strategy == "hold":
-                continue                         # identical to "none" at N=1
+        for strategy in ("hold", "track", "union"):
+            if n == 1 and strategy != "track":
+                continue  # at N=1, hold = none and union = track  
             configs.append((n, strategy))
     return configs
 
