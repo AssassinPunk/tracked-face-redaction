@@ -2,7 +2,8 @@
 import cv2
 import pytest
 
-from app.core.video_pipeline import probe_video, redact_video
+from app.core.video_pipeline import (VideoLimitError, VideoLimits, check_limits,
+                                     probe_video, redact_video)
 
 
 def test_probe_reads_source_properties(crew_video, crew_image):
@@ -55,3 +56,31 @@ def test_non_video_file_is_rejected(tmp_path, detector):
     fake.write_text("this is not a video")
     with pytest.raises(ValueError):
         redact_video(fake, tmp_path / "out.mp4", detector)
+
+def test_output_is_browser_playable_h264(crew_video, detector, tmp_path):
+    out = tmp_path / "out.mp4"
+    redact_video(crew_video.path, out, detector)
+    cap = cv2.VideoCapture(str(out))
+    fourcc = int(cap.get(cv2.CAP_PROP_FOURCC)).to_bytes(4, "little").decode().lower()
+    cap.release()
+    assert fourcc in {"avc1", "h264"}  # how OpenCV reports H.264 varies by platform
+
+
+def test_too_long_video_is_rejected_without_output(crew_video, detector, tmp_path):
+    out = tmp_path / "out.mp4"
+    with pytest.raises(VideoLimitError):
+        redact_video(crew_video.path, out, detector,
+                     limits=VideoLimits(max_seconds=1, max_pixels=10**9))
+    assert not out.exists()  # nothing half-written is left behind
+
+
+def test_too_large_frame_is_rejected(crew_video):
+    with pytest.raises(VideoLimitError):
+        check_limits(probe_video(crew_video.path),
+                     VideoLimits(max_seconds=60, max_pixels=100 * 100))
+
+
+def test_stage_timings_are_recorded(crew_video, detector, tmp_path):
+    result = redact_video(crew_video.path, tmp_path / "out.mp4", detector)
+    assert set(result.stage_seconds) == {"decode", "detect", "anonymise", "encode"}
+    assert 0 < sum(result.stage_seconds.values()) <= result.seconds

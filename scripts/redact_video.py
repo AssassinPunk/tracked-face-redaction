@@ -43,6 +43,10 @@ def main() -> int:
     print(f"Processed  : {result.frames_processed} frames in {result.seconds:.1f} s")
     print(f"Speed      : {result.processing_fps:.1f} fps  "
           f"(realtime factor {result.realtime_factor:.2f}x)")
+    total = sum(result.stage_seconds.values())
+    print("Time by stage:")
+    for stage, secs in result.stage_seconds.items():
+        print(f"  {stage:<10} {secs:6.1f} s  ({100 * secs / total:4.1f}%)")
     print(f"Faces/frame: min {min(counts)}, mean {statistics.mean(counts):.1f}, max {max(counts)}")
     def stamp(i: int) -> str:  # frame index plus its time in the video}
         return f"{i} ({i / info.fps:.2f}s)"

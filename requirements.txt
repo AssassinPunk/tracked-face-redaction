@@ -5,6 +5,9 @@ numpy>=1.26,<2.0
 # 4.10.0.84 works with NumPy 1.x; 4.12+ is built for NumPy 2.
 opencv-python-headless==4.10.0.84
 
+# Bundled ffmpeg binary (no system install) for browser-playable H.264 output.
+imageio-ffmpeg==0.6.0
+
 # ---- Tracking ----
 norfair==2.3.0
 
