@@ -25,7 +25,12 @@ def main() -> int:
     parser.add_argument("--mode", choices=[m.value for m in Mode], default="pixelate")
     parser.add_argument("--strength", type=float, default=None)
     parser.add_argument("--max-frames", type=int, default=None)
+    parser.add_argument("--detect-every", type=int, default=1,
+                        help="run the detector every N frames")
+    parser.add_argument("--strategy", choices=["none", "hold", "track"], default=None,
+                        help="boxes on skipped frames (default: none if N=1, else track)")
     args = parser.parse_args()
+    strategy = args.strategy or ("none" if args.detect_every == 1 else "track")
 
     info = probe_video(args.video)
     print(f"Source     : {args.video.name}  {info.width}x{info.height} @ {info.fps:.2f} fps, "
@@ -33,14 +38,17 @@ def main() -> int:
 
     out_dir = PROJECT_ROOT / "outputs"
     out_dir.mkdir(exist_ok=True)
-    out_path = out_dir / f"{args.video.stem}_redacted_{args.mode}.mp4"
+    out_path = out_dir / f"{args.video.stem}_{args.mode}_n{args.detect_every}_{strategy}.mp4"
 
     result = redact_video(args.video, out_path, FaceDetector(),
                           mode=args.mode, strength=args.strength,
-                          max_frames=args.max_frames)
+                          max_frames=args.max_frames,
+                          detect_every=args.detect_every, strategy=strategy)
 
     counts = result.faces_per_frame
     print(f"Processed  : {result.frames_processed} frames in {result.seconds:.1f} s")
+    print(f"Detection  : every {args.detect_every} frame(s), strategy={strategy}, "
+          f"detector ran on {result.detection_frames} frames")
     print(f"Speed      : {result.processing_fps:.1f} fps  "
           f"(realtime factor {result.realtime_factor:.2f}x)")
     total = sum(result.stage_seconds.values())

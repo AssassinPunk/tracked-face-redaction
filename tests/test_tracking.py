@@ -66,3 +66,9 @@ def test_invalid_arguments_rejected():
         FaceTracker(detect_every=0)
     with pytest.raises(ValueError):
         FaceTracker(coast_frames=-1)
+
+def test_matched_faces_are_not_redacted_twice():
+    tracker = FaceTracker(detect_every=1)
+    for _ in range(5):
+        boxes = tracker.update([face(100, 100), face(400, 100)])
+    assert len(boxes) == 2  # raw detections only; matched tracks not duplicated

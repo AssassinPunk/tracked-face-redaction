@@ -1,7 +1,10 @@
 """Video redaction: decode frames -> detect -> anonymise -> encode (H.264).
 
-Baseline: detection runs on EVERY frame. Milestone 6 adds detect-every-N
-with tracking, and is measured against this baseline.
+Detection runs every `detect_every` frames. On the frames in between, the
+boxes come from one of two strategies:
+  - HOLD:  reuse the last detection frame's boxes unchanged (simple baseline)
+  - TRACK: Norfair predicts where each face moved (Kalman filter)
+detect_every=1 with Strategy.NONE is the detect-every-frame baseline.
 
 OpenCV reads video through file paths, not bytes, so this module takes
 paths. (The API will use temporary files.)
@@ -11,15 +14,23 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 
 import cv2
 
 from app.core.anonymize import DEFAULT_MODE, Mode, anonymize
-from app.core.detector import FaceDetector
+from app.core.detector import Face, FaceDetector
+from app.core.tracking import FaceTracker
 from app.core.video_encoder import H264Writer
 
-STAGES = ("decode", "detect", "anonymise", "encode")
+STAGES = ("decode", "detect", "track", "anonymise", "encode")
+
+
+class Strategy(str, Enum):
+    NONE = "none"    # no skipping: only valid with detect_every=1
+    HOLD = "hold"    # reuse the last detected boxes on skipped frames
+    TRACK = "track"  # Kalman-predicted boxes on skipped frames
 
 
 class VideoLimitError(ValueError):
@@ -47,9 +58,10 @@ class VideoInfo:
 @dataclass(frozen=True)
 class VideoResult:
     info: VideoInfo
-    faces_per_frame: list[int]
+    faces_per_frame: list[int]  # boxes redacted on each frame
     seconds: float
     stage_seconds: dict[str, float] = field(default_factory=dict)
+    detection_frames: int = 0   # how many frames the detector actually ran on
 
     @property
     def frames_processed(self) -> int:
@@ -105,18 +117,36 @@ def redact_video(
     strength: float | None = None,
     max_frames: int | None = None,
     limits: VideoLimits | None = None,
+    detect_every: int = 1,
+    strategy: Strategy | str = Strategy.NONE,
+    coast_frames: int = 10,
 ) -> VideoResult:
     """Detect and anonymise faces in every frame; write a browser-playable MP4.
 
+    detect_every: run the detector on frames 0, N, 2N, ...
+    strategy:     where boxes come from on the frames in between (see above).
+    coast_frames: TRACK only: extra frames a track survives after the
+                  detector stops seeing its face.
     max_frames: stop early (demos and tests).
     limits:     reject the video (VideoLimitError) if it is too large or too
                 long. The header's frame count can lie, so the duration limit
                 is also enforced while reading.
     """
+    strategy = Strategy(strategy)
+    if detect_every < 1:
+        raise ValueError("detect_every must be >= 1.")
+    if detect_every > 1 and strategy is Strategy.NONE:
+        raise ValueError("Skipping frames needs strategy 'hold' or 'track'; "
+                         "with 'none' the skipped frames would not be redacted.")
+
     cap = cv2.VideoCapture(str(input_path))
     if not cap.isOpened():
         raise ValueError(f"Could not open {Path(input_path).name} as a video.")
 
+    tracker = (FaceTracker(detect_every, coast_frames)
+               if strategy is Strategy.TRACK else None)
+    held: list[Face] = []  # HOLD: boxes from the last detection frame
+    detection_frames = 0
     faces_per_frame: list[int] = []
     stages = dict.fromkeys(STAGES, 0.0)
     try:
@@ -140,18 +170,33 @@ def redact_video(
                                           f"{limits.max_seconds:g} s limit.")
                 if (frame.shape[1], frame.shape[0]) != size:
                     frame = cv2.resize(frame, size)
-                faces = detector.detect(frame)
+
+                is_detection_frame = len(faces_per_frame) % detect_every == 0
+                detected = None
+                if is_detection_frame:
+                    detected = detector.detect(frame)
+                    detection_frames += 1
                 t2 = time.perf_counter()
-                redacted = anonymize(frame, faces, mode=mode, strength=strength)
+
+                if tracker is not None:
+                    boxes = tracker.update(detected)  # None = predict only
+                elif detected is not None:
+                    boxes = held = detected
+                else:
+                    boxes = held                      # HOLD on a skipped frame
                 t3 = time.perf_counter()
-                writer.write(redacted)
+
+                redacted = anonymize(frame, boxes, mode=mode, strength=strength)
                 t4 = time.perf_counter()
+                writer.write(redacted)
+                t5 = time.perf_counter()
 
                 stages["decode"] += t1 - t0
                 stages["detect"] += t2 - t1
-                stages["anonymise"] += t3 - t2
-                stages["encode"] += t4 - t3
-                faces_per_frame.append(len(faces))
+                stages["track"] += t3 - t2
+                stages["anonymise"] += t4 - t3
+                stages["encode"] += t5 - t4
+                faces_per_frame.append(len(boxes))
         seconds = time.perf_counter() - start
     finally:
         cap.release()  # always free the file handle, even after an error
@@ -160,4 +205,5 @@ def redact_video(
         Path(output_path).unlink(missing_ok=True)
         raise ValueError("The video contained no readable frames.")
     return VideoResult(info=info, faces_per_frame=faces_per_frame,
-                       seconds=seconds, stage_seconds=stages)
+                       seconds=seconds, stage_seconds=stages,
+                       detection_frames=detection_frames)

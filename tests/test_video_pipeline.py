@@ -1,8 +1,11 @@
 """Video pipeline tests on a synthetic clip with a known answer (4 faces/frame)."""
+
+import math
+
 import cv2
 import pytest
 
-from app.core.video_pipeline import (VideoLimitError, VideoLimits, check_limits,
+from app.core.video_pipeline import (Strategy, VideoLimitError, VideoLimits, check_limits,
                                      probe_video, redact_video)
 
 
@@ -82,5 +85,52 @@ def test_too_large_frame_is_rejected(crew_video):
 
 def test_stage_timings_are_recorded(crew_video, detector, tmp_path):
     result = redact_video(crew_video.path, tmp_path / "out.mp4", detector)
-    assert set(result.stage_seconds) == {"decode", "detect", "anonymise", "encode"}
+    assert set(result.stage_seconds) == {"decode", "detect", "track", "anonymise", "encode"}
     assert 0 < sum(result.stage_seconds.values()) <= result.seconds
+
+class CountingDetector:
+    """Wraps the real detector and counts how often it runs."""
+
+    def __init__(self, inner):
+        self.inner, self.calls = inner, 0
+
+    def detect(self, frame):
+        self.calls += 1
+        return self.inner.detect(frame)
+
+
+def assert_no_face_in_video(path, detector, expected_frames):
+    cap = cv2.VideoCapture(str(path))
+    frames = 0
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok:
+                break
+            assert detector.detect(frame) == [], f"face visible in frame {frames}"
+            frames += 1
+    finally:
+        cap.release()
+    assert frames == expected_frames
+
+
+@pytest.mark.parametrize("n, strategy", [(5, "hold"), (5, "track"), (10, "track")])
+def test_detector_runs_only_every_n_frames(crew_video, detector, tmp_path, n, strategy):
+    counting = CountingDetector(detector)
+    result = redact_video(crew_video.path, tmp_path / "out.mp4", counting,
+                          detect_every=n, strategy=strategy)
+    assert counting.calls == result.detection_frames == math.ceil(crew_video.frames / n)
+    assert result.frames_processed == crew_video.frames
+
+
+@pytest.mark.parametrize("strategy", [Strategy.HOLD, Strategy.TRACK])
+def test_no_face_detectable_when_skipping_frames(crew_video, detector, tmp_path, strategy):
+    # The crew faces move 2 px per frame, so skipped frames really need boxes.
+    out = tmp_path / "out.mp4"
+    redact_video(crew_video.path, out, detector, detect_every=5, strategy=strategy)
+    assert_no_face_in_video(out, detector, crew_video.frames)
+
+
+def test_skipping_frames_without_a_strategy_is_rejected(crew_video, detector, tmp_path):
+    with pytest.raises(ValueError):
+        redact_video(crew_video.path, tmp_path / "out.mp4", detector, detect_every=5)

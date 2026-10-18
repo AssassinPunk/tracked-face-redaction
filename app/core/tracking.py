@@ -50,6 +50,14 @@ class FaceTracker:
             ]
             # period tells Norfair how many frames pass between detections
             tracked = self._tracker.update(detections, period=self.detect_every)
+            # A track matched on this frame is already covered by its raw
+            # detection, the most accurate box we have; keep only the tracks
+            # the detector missed (they "coast" on their prediction).
+            matched = {id(d) for d in detections}
+            tracked = [o for o in tracked if id(o.last_detection) not in matched]
+
+        boxes = [b for b in (self._to_face(obj) for obj in tracked) if b is not None]
+        return list(faces or []) + boxes
 
         boxes = [b for b in (self._to_face(obj) for obj in tracked) if b is not None]
         # On detection frames, also redact the raw detections themselves:
