@@ -114,3 +114,24 @@ Images: group photo (24 detected faces, 2784x2333) and the crew fixture
 
 **Hypothesis for Milestone 6:** a tracker may carry a face through frames
 where detection misses it, reducing leaks as well as cost. To be tested.
+
+## 2026-10-18: Video stage timing (H.264 output)
+
+Same 4K clip (3840x2160 @ 25 fps, 505 frames), Ryzen 7 4800H, pixelate, single run.
+
+| Stage | Seconds | Share |
+|---|---|---|
+| decode | 14.4 | 32.3% |
+| detect | 12.5 | 28.1% |
+| anonymise | 12.2 | 27.3% |
+| encode | 5.5 | 12.3% |
+| total | 45.1, 11.2 fps, 0.45x realtime | |
+
+- Piping frames to ffmpeg (separate, multi-threaded process) was faster than
+  OpenCV's mp4v writer: 45.1 s vs 66.6 s (single runs, indicative).
+- Amdahl: detection is 28% of the time, so skipping it entirely gives at most
+  1.38x on 4K. Detection runs at 640 px regardless of input size while the
+  other stages scale with pixels, so at 1080p tracking should matter more:
+  benchmark a 1080p clip in Milestone 7.
+- Anonymise (27%) likely dominated by the full-frame copy in anonymize();
+  candidate optimisation, to be measured, not assumed.
