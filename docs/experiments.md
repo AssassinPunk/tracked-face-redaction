@@ -174,3 +174,16 @@ face regions across consecutive frames.
   change speed or direction. Neither is safe at N=10.
 - Hypothesis for Milestone 7: redacting the union of held and tracked boxes
   on skipped frames covers both failure modes, at the cost of more area.
+
+## 2026-10-18: Union strategy at N=10 (visual + timing)
+
+- Coverage: union covered every frame that hold or track covered in both
+  test cases (woman 147-162; edge-cut man 260-270). Neither box exists for
+  the edge-cut face after 271, so union cannot fix that leak either.
+- Cost: 46.0 s vs 34.4 s for track and 42.3 s for the every-frame baseline.
+  Union redacts ~2x the boxes on skipped frames (mean 8.3 vs 4.4 per frame)
+  and anonymise rose to 22.0 s (48%). On 4K, union at N=10 is slower than not
+  skipping at all, so anonymise must be optimised (avoid the full-frame copy;
+  merge overlapping held/tracked boxes) before union can be worthwhile.
+- Box counts alternate between detection and skipped frames under union, so
+  the one-frame-dip heuristic reports every detection frame: not a leak metric.

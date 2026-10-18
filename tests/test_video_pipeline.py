@@ -124,7 +124,7 @@ def test_detector_runs_only_every_n_frames(crew_video, detector, tmp_path, n, st
     assert result.frames_processed == crew_video.frames
 
 
-@pytest.mark.parametrize("strategy", [Strategy.HOLD, Strategy.TRACK])
+@pytest.mark.parametrize("strategy", [Strategy.HOLD, Strategy.TRACK, Strategy.UNION])
 def test_no_face_detectable_when_skipping_frames(crew_video, detector, tmp_path, strategy):
     # The crew faces move 2 px per frame, so skipped frames really need boxes.
     out = tmp_path / "out.mp4"
