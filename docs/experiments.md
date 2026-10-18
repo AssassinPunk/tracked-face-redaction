@@ -157,3 +157,20 @@ median of 3 runs. Data: benchmarks/results/clip-20261018-161936/.
 - Zero-box frames depend on where detection frames fall (hold: 5 at N=5,
   0 at N=10/20, because frame 295 is a detection frame only at N=5). Not a
   valid leak metric: Milestone 7 measures uncovered faces against annotations.
+
+## 2026-10-18: Hold vs track at N=10 (visual, frame by frame)
+
+Compared n10_hold.mp4 and n10_track.mp4 from the sweep by cropping the same
+face regions across consecutive frames.
+
+- Edge-cut face (detector misses it from frame 260): hold repeats the empty
+  detection and exposes it from 260; track coasts it until 270 (11 frames,
+  = coast_frames + 1), then exposes it too. Tracking shortens the leak
+  (~80 -> ~69 frames) but cannot fix a face the detector never finds.
+- Moving face that stops (frames 147-159): hold exposes part of the face
+  while it moves (147-149); track exposes the face for 5 frames (155-159)
+  because the Kalman prediction keeps moving the box after she stops.
+- Opposite failure modes: hold fails when faces move; track fails when they
+  change speed or direction. Neither is safe at N=10.
+- Hypothesis for Milestone 7: redacting the union of held and tracked boxes
+  on skipped frames covers both failure modes, at the cost of more area.
