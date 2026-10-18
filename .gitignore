@@ -26,5 +26,8 @@ samples/
 outputs/
 tmp/
 
+# Benchmark output videos contain (redacted) people; CSV/JSON results are committed
+benchmarks/results/**/*.mp4
+
 # --- Model weights (downloaded by a script, not committed) ---
 models/*.onnx
